@@ -29,26 +29,16 @@ class Bili():
         self.PARTS = re.compile("<option value=.{1}(/video/av\d+/index_\d+\.html).*>(.*)</option>")
         # 匹配索引视频列表
         self.ITEMS = re.compile('<li.*?pubdate="(.*?)">.*?<a href=".*?av(\d+)/".*?>(.*?)</a></li>')
+        # 匹配搜索视频列表
+        self.SEARCH = re.compile(r'<a href=".*?av(\d+)/".*?\n.*?\n.*?<div class="t">(.*?)</div>',re.MULTILINE)
+        # 匹配去标签
+        self.NOTAG = re.compile(r'<[^<]*?>')
+
         # 生成完整的URL
         for item in self.RSS_URLS:
             item['url'] = self.BASE_URL + item['url']
         for item in self.INDEX_URLS:
             item['url'] = self.BASE_URL + item['url']
-        try:
-            os.remove(self._get_tmp_dir() + '/tmp.ass')
-        except:
-            pass
-
-    def _get_tmp_dir(self):
-        if len(TEMP_DIR) != 0:
-            return TEMP_DIR
-        try:
-            return tempfile.gettempdir()
-        except:
-            return TEMP_DIR
-
-    def _print_info(self, info):
-        print '[Bilibili]: ' + info
 
     # 根据英文名称返回URL
     def _get_url(self, dict_obj, name):
@@ -65,8 +55,7 @@ class Bili():
         return self._get_url(self.INDEX_URLS, name)
 
     # 根据页面内容解析视频请求页面URL
-    def _parse_urls(self, page_content, need_subtitle = True):
-        self._print_info('Parsing page')
+    def _parse_urls(self, page_content):
         url_params = self.URL_PARAMS.findall(page_content)
         interface_full_url = ''
         # 如果使用第一种正则匹配成功
@@ -74,110 +63,96 @@ class Bili():
             interface_full_url = self.INTERFACE_URL.format(str(url_params[0]))
         # 如果匹配不成功则使用第二种正则匹配
         if not url_params:
-            self._print_info('Parsing page by another regex')
             url_params = self.URL_PARAMS2.findall(page_content)
             if url_params and len(url_params) == 1 and url_params[0]:
                 interface_full_url = self.INTERFACE_URL.format(str(url_params[0]))
         if interface_full_url:
-            self._print_info('Interface url: ' + interface_full_url)
             # 解析RSS页面
-            self._print_info('Getting video address by interface page')
             content = utils.get_page_content(interface_full_url)
-            self._print_info('Interface page length: ' + str(len(content)))
             doc = minidom.parseString(content)
             parts = doc.getElementsByTagName('durl')
-            self._print_info('Video parts found: ' + str(len(parts)))
             result = []
             # 找出所有视频地址
             for part in parts:
                 urls = part.getElementsByTagName('url')
                 if len(urls) > 0:
                     result.append(urls[0].firstChild.nodeValue)
-            if need_subtitle:
-                return (result, self._parse_subtitle(url_params[0]))
-            else:
-                return (result, '')
-        else:
-            _print_info('Interface url not found!')
+            return (result, self._parse_subtitle(url_params[0]))
+        print interface_full_url
         return ([], '')
 
     # 调用niconvert生成弹幕的ass文件
     def _parse_subtitle(self, cid):
         page_full_url = self.COMMENT_URL.format(cid)
-        self._print_info('Page full url: ' + page_full_url)
-        website = None
-        try:
-            website = create_website(page_full_url)
-            if website is None:
-                self._print_info(page_full_url + " not supported")
-                return ''
-            else:
-                self._print_info('Generating subtitle')
-                text = website.ass_subtitles_text(
-                    font_name=u'黑体',
-                    font_size=36,
-                    resolution='%d:%d' % (self.WIDTH, self.HEIGHT),
-                    line_count=12,
-                    bottom_margin=0,
-                    tune_seconds=0
-                )
-                f = open(self._get_tmp_dir() + '/tmp.ass', 'w')
-                f.write(text.encode('utf8'))
-                f.close()
-                self._print_info('Subtitle generation succeeded!')
-                return 'tmp.ass'
-        except Exception as e:
-            self._print_info("Exception raised when generating subtitle: %s" % e)
+        print page_full_url
+        website = create_website(page_full_url)
+        if website is None:
+            print page_full_url + " not supported"
             return ''
+        else:
+            text = website.ass_subtitles_text(
+                font_name=u'黑体',
+                font_size=36,
+                resolution='%d:%d' % (self.WIDTH, self.HEIGHT),
+                line_count=12,
+                bottom_margin=0,
+                tune_seconds=0
+            )
+            f = open(tempfile.gettempdir() + '/tmp.ass', 'w')
+            f.write(text.encode('utf8'))
+            return 'tmp.ass'
 
     def _need_rebuild(self, file_path):
         return time.localtime(os.stat(file_path).st_ctime).tm_mday != time.localtime().tm_mday
 
-    def _get_index_items_from_web(self, url):
-        page_content = utils.get_page_content(url)
-        results_dict = dict()
-        results_month_dict = dict()
-        parts = page_content.split('<h3>')
-        for part in parts:
-            results = self.ITEMS.findall(part)
-            key = part[0]
-            results_dict[key] = []
-            for r in results:
-                results_dict[key].append((r[1], r[2], r[0]))
-                if r[0] in results_month_dict.keys():
-                    results_month_dict[r[0]].append((r[1], r[2]))
-                else:
-                    results_month_dict[r[0]] = [(r[1], r[2])]
-        return results_dict, results_month_dict
-
     # 获取索引项目，并缓存
     def _get_index_items(self, url):
-        pickle_file_by_word = self._get_tmp_dir() + '/' + url.split('/')[-1].strip() + '_word_tmp.pickle'
-        pickle_file_by_month = self._get_tmp_dir() + '/' + url.split('/')[-1].strip() + '_month_tmp.pickle'
-        try:
-            if  os.path.exists(pickle_file_by_word) and os.path.exists(pickle_file_by_month) and not self._need_rebuild(pickle_file_by_word) and not self._need_rebuild(pickle_file_by_month):
-                self._print_info('Index files already exists!')
-                return pickle.load(open(pickle_file_by_word, 'rb')), pickle.load(open(pickle_file_by_month, 'rb'))
-            else:
-                results_dict, results_month_dict = self._get_index_items_from_web(url)
-                try:
-                    word_file = open(pickle_file_by_word, 'wb')
-                    month_file = open(pickle_file_by_month, 'wb')
-                    pickle.dump(results_dict, word_file)
-                    pickle.dump(results_month_dict, month_file)
-                    self._print_info('Index files fetched succeeded!')
-                except:
-                    self._print_info('Index files generate failed!')
-                return results_dict, results_month_dict
-        except:
-            return self._get_index_items_from_web(url)
+        pickle_file_by_word = tempfile.gettempdir() + '/' + url.split('/')[-1].strip() + '_word_tmp.pickle'
+        pickle_file_by_month = tempfile.gettempdir() + '/' + url.split('/')[-1].strip() + '_month_tmp.pickle'
+        if os.path.exists(pickle_file_by_word) and os.path.exists(pickle_file_by_month) and not self._need_rebuild(pickle_file_by_word) and not self._need_rebuild(pickle_file_by_month):
+            return pickle.load(open(pickle_file_by_word, 'rb')), pickle.load(open(pickle_file_by_month, 'rb'))
+        else:
+            page_content = utils.get_page_content(url)
+            results_dict = dict()
+            results_month_dict = dict()
+            parts = page_content.split('<h3>')
+            for part in parts:
+                results = self.ITEMS.findall(part)
+                key = part[0]
+                results_dict[key] = []
+                for r in results:
+                    results_dict[key].append((r[1], r[2], r[0]))
+                    if r[0] in results_month_dict.keys():
+                        results_month_dict[r[0]].append((r[1], r[2]))
+                    else:
+                        results_month_dict[r[0]] = [(r[1], r[2])]
+            word_file = open(pickle_file_by_word, 'wb')
+            month_file = open(pickle_file_by_month, 'wb')
+            pickle.dump(results_dict, word_file)
+            pickle.dump(results_month_dict, month_file)
+            return results_dict, results_month_dict
+
+    # 获取搜索项目，并缓存
+    def _get_search_items(self, keyword):
+        search_url = r'http://www.bilibili.tv/search?keyword='+keyword+'&pagesize=500'
+        pickle_file = tempfile.gettempdir() + '/' + keyword + '_tmp.pickle'
+        if os.path.exists(pickle_file) and not self._need_rebuild(pickle_file):
+            return pickle.load(open(pickle_file, 'rb'))
+        else:
+            page_content = utils.get_page_content(search_url)
+            r = self.SEARCH.findall(page_content)
+            results = []
+            for li,na in r:
+                na  = self.NOTAG.sub('',na)
+                results.append((li,na))
+            word_file = open(pickle_file, 'wb')
+            pickle.dump(results, word_file)
+        return results
 
     # 获取RSS项目，返回合法的菜单列表
     def get_rss_items(self, category):
-        self._print_info('Getting RSS Items')
         rss_url = self._get_rss_url(category)
         parse_result = feedparser.parse(rss_url)
-        self._print_info('RSS Items fetched succeeded!')
         return [ {
             'title': x.title,
             'link': x.link.replace(BASE_URL+'video/av', '').replace('/', ''),
@@ -187,12 +162,10 @@ class Bili():
 
     # 获取索引项目，返回合法的菜单列表
     def get_index_items(self, category, type_id=0):
-        self._print_info('Getting Index Items')
         if type_id > 1:
             return []
         index_url = self._get_index_url(category)
         parse_result = self._get_index_items(index_url)
-        self._print_info('Index items fetched succeeded!')
         return [ {
             'title': x,
             'link': x,
@@ -200,12 +173,20 @@ class Bili():
             'published': x
         } for x in sorted(parse_result[type_id].keys(), reverse=bool(type_id))]
 
+    # 从缓存中返回搜索视频结果
+    def get_video_by_keyword(self, keyword):
+        return [ {
+            'title': x[1],
+            'link': x[0],
+            'description': x[1],
+            'published': keyword
+        } for x in self._get_search_items(keyword)]
+
+
     # 从缓存字典中返回视频结果
     def get_video_by_ident(self, category, display_type, ident):
-        self._print_info('Getting items from cache')
         index_url = self._get_index_url(category)
         parse_result = self._get_index_items(index_url)
-        self._print_info('Cached items fetched succeeded!')
         return [ {
             'title': x[1],
             'link': x[0],
@@ -215,7 +196,6 @@ class Bili():
 
     # 根据不同类型返回相应的视频列表
     def get_items(self, target, category=None):
-        self._print_info('Getting items by type')
         if target == 'RSS':
             if category:
                 return self.get_rss_items(category)
@@ -239,10 +219,9 @@ class Bili():
             return [(part[1], part[0][1:]) for part in parts]
 
     # 获取视频地址
-    def get_video_urls(self, url, need_subtitle=True):
-        self._print_info('Getting video address')
+    def get_video_urls(self, url):
         page_full_url = self.BASE_URL + url
-        self._print_info('Page url: ' + page_full_url)
+        print page_full_url
         page_content = utils.get_page_content(page_full_url)
-        self._print_info('Origin page length: ' + str(len(page_content)))
-        return self._parse_urls(page_content, need_subtitle)
+        return self._parse_urls(page_content)
+

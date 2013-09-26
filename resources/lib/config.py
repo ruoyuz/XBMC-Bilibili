@@ -10,7 +10,7 @@ INTERFACE_URL = r'http://interface.bilibili.tv/playurl?cid={0}'
 COMMENT_URL = r'http://comment.bilibili.tv/{0}.xml'
 
 # 根菜单
-ROOT_PATH = [ 'RSS', 'Index' ]
+ROOT_PATH = [ 'RSS', 'Index', 'Search']
 
 # 列表类型
 LIST_TYPE = [ 'Month', 'Alpha' ]
@@ -70,8 +70,25 @@ INDEX_URLS = [
         'name': u'专辑三次元',
         'eng_name': 'album3',
         'url': 'sitemap/sitemap-15.html'
-    }
+    },
+    {
+        'name': u'生活娱乐',
+        'eng_name': 'mixup',
+        'url': 'sitemap/sitemap-21.html'
+    },
+    {
+        'name': u'影视',
+        'eng_name': 'movie',
+        'url': 'sitemap/sitemap-23.html'
+    },
+    {
+        'name': u'科普知识',
+        'eng_name': 'science',
+        'url': 'sitemap/sitemap-37.html'
+    },
+    {
+        'name': u'人文地理',
+        'eng_name': 'documentary',
+        'url': 'sitemap/sitemap-38.html'
+    } 
 ]
-
-# 临时文件目录
-TEMP_DIR = ''
