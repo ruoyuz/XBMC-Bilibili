@@ -9,7 +9,7 @@
 
 ## 安装方法
 
-1. [下载插件](https://github.com/ruoyuz/XBMC-Bilibili/archive/master.zip)
+1. [下载修改版插件](https://github.com/ruoyuz/XBMC-Bilibili/archive/master.zip)
 2. 打开XBMC，选择系统设置->扩展功能->从zip文件安装
 3. 选择下载的zip文件
 4. 安装完成
