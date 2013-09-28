@@ -67,10 +67,13 @@ def show_target_items(target):
     dir_list = []
     if target == 'Search':
         keyword = plugin.keyboard('','请输入搜索关键字')
-        dir_list = [ {
-            'label': item['title'],
-            'path': plugin.url_for('show_video_list', url=item['link'])
-        } for item in bili.get_video_by_keyword(keyword)]
+        if keyword:
+            dir_list = [ {
+                'label': item['title'],
+                'path': plugin.url_for('show_video_list', url=item['link'])
+            } for item in bili.get_video_by_keyword(keyword)]
+        else:
+            return index()
     else:
         dir_list = [
             {
